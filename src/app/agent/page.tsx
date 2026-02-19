@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { getVapi } from "@/lib/vapi";
-import { DEFAULT_SYSTEM_PROMPT, buildPrompt } from "@/lib/agent-prompt";
+import { AgentLanguage, SYSTEM_PROMPT_EN, buildPrompt } from "@/lib/agent-prompt";
 import { supabase, Property } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -15,17 +15,19 @@ import {
     Loader2,
     MessageSquare,
     Sparkles,
+    Globe,
 } from "lucide-react";
 
 type CallStatus = "idle" | "connecting" | "active" | "ended";
 
 export default function AgentPage() {
-    const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+    const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT_EN);
     const [callStatus, setCallStatus] = useState<CallStatus>("idle");
     const [transcript, setTranscript] = useState<
         { role: string; text: string }[]
     >([]);
     const [isMuted, setIsMuted] = useState(false);
+    const [language, setLanguage] = useState<AgentLanguage>("en");
     const transcriptEndRef = useRef<HTMLDivElement>(null);
 
     /* Auto-scroll transcript */
@@ -33,17 +35,23 @@ export default function AgentPage() {
         transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [transcript]);
 
-    /* Load properties into prompt */
+    /* Load AVAILABLE properties into prompt (filtered by status) */
     useEffect(() => {
         async function loadProperties() {
-            const { data } = await supabase.from("properties").select("*");
+            const { data } = await supabase
+                .from("properties")
+                .select("*")
+                .eq("status", "Available");
+
             if (data && data.length > 0) {
                 const json = JSON.stringify(data, null, 2);
-                setSystemPrompt(buildPrompt(json));
+                setSystemPrompt(buildPrompt(json, language));
+            } else {
+                setSystemPrompt(buildPrompt("[]", language));
             }
         }
         loadProperties();
-    }, []);
+    }, [language]);
 
     /* Vapi Event Listeners */
     useEffect(() => {
@@ -160,7 +168,7 @@ export default function AgentPage() {
                 transcriber: {
                     provider: "deepgram",
                     model: "nova-2",
-                    language: "en",
+                    language: language === "fr" ? "fr" : "en",
                 },
                 voice: {
                     provider: "11labs",
@@ -172,7 +180,7 @@ export default function AgentPage() {
             toast.error("Failed to start call. Check your Vapi API key.");
             setCallStatus("idle");
         }
-    }, [systemPrompt]);
+    }, [systemPrompt, language]);
 
     const endCall = useCallback(() => {
         try {
@@ -207,13 +215,40 @@ export default function AgentPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white">
-                    Voice Agent
-                </h1>
-                <p className="mt-1 text-sm text-white/50">
-                    Configure and test the AI call agent
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-white">
+                        Voice Agent
+                    </h1>
+                    <p className="mt-1 text-sm text-white/50">
+                        Configure and test the AI call agent
+                    </p>
+                </div>
+
+                {/* Language Toggle */}
+                <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-white/40" />
+                    <div className="flex rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/[0.08]">
+                        <button
+                            onClick={() => setLanguage("en")}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${language === "en"
+                                    ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30"
+                                    : "text-white/40 hover:text-white/60"
+                                }`}
+                        >
+                            EN
+                        </button>
+                        <button
+                            onClick={() => setLanguage("fr")}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${language === "fr"
+                                    ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30"
+                                    : "text-white/40 hover:text-white/60"
+                                }`}
+                        >
+                            FR
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -222,6 +257,9 @@ export default function AgentPage() {
                     <div className="mb-4 flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-blue-400" />
                         <h2 className="text-lg font-semibold text-white">System Prompt</h2>
+                        <span className="ml-auto inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 ring-1 ring-emerald-500/20">
+                            Available Only
+                        </span>
                     </div>
                     <textarea
                         value={systemPrompt}

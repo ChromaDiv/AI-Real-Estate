@@ -15,9 +15,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LeadFlow Intelligence — Real Estate AI",
+  title: "LeadFlow Intelligence",
   description:
-    "AI-powered real estate lead intelligence system with voice agent integration",
+    "AI-powered real estate lead intelligence system with voice agent integration. Capture, categorize, and manage leads in real-time.",
+  openGraph: {
+    title: "LeadFlow Intelligence",
+    description: "AI-powered real estate lead intelligence system",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

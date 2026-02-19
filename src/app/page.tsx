@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, Lead, Property } from "@/lib/supabase";
+import { supabase, Lead } from "@/lib/supabase";
 import { useRealtimeLeads } from "@/hooks/useRealtimeLeads";
 import { StatCard } from "@/components/StatCard";
 import { LeadBadge } from "@/components/LeadBadge";
 import { LiveIndicator } from "@/components/LiveIndicator";
-import { LeadDetailsDialog } from "@/components/LeadDetailsDialog";
+import { LeadDetailSheet } from "@/components/LeadDetailSheet";
+import { LeadPieChart } from "@/components/LeadPieChart";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   Flame,
@@ -14,10 +16,12 @@ import {
   Building2,
   Phone,
   Clock,
+  Search,
+  MessageCircle,
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { leads, latestLead, isConnected } = useRealtimeLeads();
+  const { leads, latestLead, isConnected, loading: leadsLoading } = useRealtimeLeads();
   const [counts, setCounts] = useState({
     properties: 0,
     hot: 0,
@@ -25,16 +29,18 @@ export default function DashboardPage() {
     spam: 0,
     total: 0,
   });
+  const [countsLoading, setCountsLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     async function fetchCounts() {
-      // Properties
+      setCountsLoading(true);
+
       const { count: properties } = await supabase
         .from("properties")
         .select("*", { count: "exact", head: true });
 
-      // Leads Breakdown
       const { count: hot } = await supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
@@ -61,9 +67,20 @@ export default function DashboardPage() {
         spam: spam ?? 0,
         total: total ?? 0,
       });
+      setCountsLoading(false);
     }
     fetchCounts();
   }, [leads]); // Re-fetch when new leads come in via realtime
+
+  /* ── Filter leads by search query ── */
+  const filteredLeads = leads.filter((lead) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      lead.name?.toLowerCase().includes(q) ||
+      lead.phone?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-8">
@@ -88,24 +105,40 @@ export default function DashboardPage() {
           icon={Users}
           trend="+12% this week"
           accentColor="from-blue-500/20 to-indigo-500/20"
+          loading={countsLoading}
         />
         <StatCard
           label="Hot Leads"
           value={counts.hot}
           icon={Flame}
           accentColor="from-emerald-500/20 to-green-500/20"
+          loading={countsLoading}
         />
         <StatCard
           label="Warm Leads"
           value={counts.warm}
           icon={Sun}
           accentColor="from-amber-500/20 to-orange-500/20"
+          loading={countsLoading}
         />
         <StatCard
           label="Properties"
           value={counts.properties}
           icon={Building2}
           accentColor="from-purple-500/20 to-pink-500/20"
+          loading={countsLoading}
+        />
+      </div>
+
+      {/* ─── Search Bar ─── */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+        <input
+          type="text"
+          placeholder="Search leads by name or phone…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full rounded-xl bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white/80 ring-1 ring-white/[0.06] placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all"
         />
       </div>
 
@@ -119,17 +152,34 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-            {leads.length === 0 ? (
+            {leadsLoading ? (
+              /* Skeleton rows while loading */
+              Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-4 rounded-xl bg-white/[0.02] p-4 ring-1 ring-white/[0.04]"
+                >
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32 rounded" />
+                    <Skeleton className="h-3 w-48 rounded" />
+                  </div>
+                  <Skeleton className="h-3 w-16 rounded" />
+                </div>
+              ))
+            ) : filteredLeads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
                   <Phone className="h-8 w-8 text-white/20" />
                 </div>
                 <p className="mt-4 text-sm text-white/40">
-                  No calls yet. Start the voice agent to receive leads.
+                  {searchQuery
+                    ? "No leads match your search."
+                    : "No calls yet. Start the voice agent to receive leads."}
                 </p>
               </div>
             ) : (
-              leads.map((lead) => (
+              filteredLeads.map((lead) => (
                 <div
                   key={lead.id}
                   onClick={() => setSelectedLead(lead)}
@@ -154,17 +204,32 @@ export default function DashboardPage() {
                     </p>
                   </div>
 
-                  <div className="flex flex-shrink-0 flex-col items-end gap-1">
-                    <span className="text-xs text-white/30">
-                      {lead.phone ?? "—"}
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] text-white/20">
-                      <Clock className="h-3 w-3" />
-                      {new Date(lead.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {/* WhatsApp button for HOT leads */}
+                    {lead.category === "HOT" && lead.phone && (
+                      <a
+                        href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded-lg bg-emerald-500/10 p-2 text-emerald-400 ring-1 ring-emerald-500/20 transition-all hover:bg-emerald-500/20"
+                        title="WhatsApp"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-xs text-white/30">
+                        {lead.phone ?? "—"}
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-white/20">
+                        <Clock className="h-3 w-3" />
+                        {new Date(lead.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))
@@ -213,37 +278,22 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Category Breakdown */}
+          {/* Lead Distribution Pie Chart */}
           <div className="mt-6">
             <h3 className="mb-3 text-sm font-medium text-white/50">
-              Lead Categories
+              Lead Distribution
             </h3>
-            <div className="space-y-3">
-              {[
-                { label: "Hot", count: counts.hot, color: "bg-emerald-400", total: counts.total },
-                { label: "Warm", count: counts.warm, color: "bg-amber-400", total: counts.total },
-                { label: "Spam", count: counts.spam, color: "bg-red-400", total: counts.total },
-              ].map((cat) => (
-                <div key={cat.label}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-white/60">{cat.label}</span>
-                    <span className="text-white/40">{cat.count}</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-white/5">
-                    <div
-                      className={`h-full rounded-full ${cat.color} transition-all duration-700`}
-                      style={{
-                        width: `${cat.total > 0 ? (cat.count / cat.total) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <LeadPieChart
+              hot={counts.hot}
+              warm={counts.warm}
+              spam={counts.spam}
+            />
           </div>
         </div>
       </div>
-      <LeadDetailsDialog
+
+      {/* Lead Detail Sheet (slide-over) */}
+      <LeadDetailSheet
         lead={selectedLead}
         open={!!selectedLead}
         onOpenChange={(open) => !open && setSelectedLead(null)}

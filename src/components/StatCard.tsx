@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface StatCardProps {
     label: string;
@@ -10,6 +11,7 @@ interface StatCardProps {
     trend?: string;
     className?: string;
     accentColor?: string;
+    loading?: boolean;
 }
 
 export function StatCard({
@@ -19,6 +21,7 @@ export function StatCard({
     trend,
     className,
     accentColor = "from-blue-500/20 to-cyan-500/20",
+    loading = false,
 }: StatCardProps) {
     return (
         <div
@@ -38,9 +41,13 @@ export function StatCard({
             <div className="relative z-10 flex items-start justify-between">
                 <div>
                     <p className="text-sm font-medium text-white/60">{label}</p>
-                    <p className="mt-2 text-3xl font-bold tracking-tight text-white">
-                        {value}
-                    </p>
+                    {loading ? (
+                        <Skeleton className="mt-2 h-9 w-20 rounded-lg" />
+                    ) : (
+                        <p className="mt-2 text-3xl font-bold tracking-tight text-white">
+                            {value}
+                        </p>
+                    )}
                     {trend && (
                         <p className="mt-1 text-xs font-medium text-emerald-400">
                             {trend}
@@ -54,3 +61,4 @@ export function StatCard({
         </div>
     );
 }
+
